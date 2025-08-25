@@ -31,10 +31,9 @@ public class FileObject {
     private Folder parent;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false) // Changed from "owner_id" to "user_id"
     private User owner;
 
     @CreationTimestamp
     private Instant createdAt;
 }
-

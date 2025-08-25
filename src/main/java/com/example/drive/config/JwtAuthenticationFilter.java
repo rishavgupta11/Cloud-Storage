@@ -91,11 +91,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
-        // Skip authentication for public endpoints
+        // Skip authentication for public endpoints - FIXED PATHS
         String path = request.getRequestURI();
-        return path.startsWith("/api/public/") ||
-                path.equals("/api/auth/login") ||
-                path.equals("/api/auth/register") ||
-                path.startsWith("/api/auth/");
+        return path.startsWith("/auth/") ||  // Changed from "/api/auth/"
+                path.equals("/error") ||
+                path.startsWith("/actuator/");
     }
 }

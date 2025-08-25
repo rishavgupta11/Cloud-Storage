@@ -9,7 +9,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "folders",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"name", "parent_id", "owner_id"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"name", "parent_id", "user_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,9 +29,9 @@ public class Folder {
     @JoinColumn(name = "parent_id")
     private Folder parent;
 
-    // Owner (User)
+    // Owner (User) - Fixed column name to match database
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false) // ✅ fixed column name
+    @JoinColumn(name = "user_id", nullable = false) // Changed from "owner_id" to "user_id"
     private User owner;
 
     @CreationTimestamp
