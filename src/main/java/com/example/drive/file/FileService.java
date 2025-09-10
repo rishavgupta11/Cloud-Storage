@@ -37,6 +37,9 @@ public class FileService {
 
     @Transactional
     public FileObject upload(MultipartFile file, Long parentId, User owner) throws IOException {
+        logger.info("Starting file upload - File: {}, ParentId: {}, Owner: {}",
+                file.getOriginalFilename(), parentId, owner.getEmail());
+
         // Validate file
         if (file.isEmpty()) {
             throw new RuntimeException("Cannot upload empty file");
@@ -57,11 +60,18 @@ public class FileService {
             Files.createDirectories(root);
         }
 
-        // Validate parent folder if specified
+        // Validate and get parent folder if specified
         Folder parent = null;
         if (parentId != null && parentId != 0) {
+            logger.info("Looking for parent folder with ID: {} owned by: {}", parentId, owner.getEmail());
             parent = folderRepo.findByIdAndOwner(parentId, owner)
-                    .orElseThrow(() -> new RuntimeException("Parent folder not found or access denied"));
+                    .orElseThrow(() -> {
+                        logger.error("Parent folder not found - ID: {}, Owner: {}", parentId, owner.getEmail());
+                        return new RuntimeException("Parent folder not found or access denied");
+                    });
+            logger.info("Found parent folder: {} (ID: {})", parent.getName(), parent.getId());
+        } else {
+            logger.info("Uploading to root folder (parentId is null or 0)");
         }
 
         // Generate unique stored filename
@@ -99,7 +109,12 @@ public class FileService {
                     .build();
 
             FileObject saved = fileRepo.save(fo);
-            logger.info("File uploaded successfully: {} by user: {}", originalFilename, owner.getEmail());
+
+            logger.info("File uploaded successfully: {} (ID: {}) in folder: {} by user: {}",
+                    originalFilename, saved.getId(),
+                    parent != null ? parent.getName() + " (ID: " + parent.getId() + ")" : "root",
+                    owner.getEmail());
+
             return saved;
 
         } catch (IOException e) {
@@ -114,12 +129,24 @@ public class FileService {
     }
 
     public List<FileObject> listByFolder(Long parentId, User owner) {
+        logger.info("Listing files - ParentId: {}, Owner: {}", parentId, owner.getEmail());
+
         Folder parent = null;
         if (parentId != null && parentId != 0) {
             parent = folderRepo.findByIdAndOwner(parentId, owner)
-                    .orElseThrow(() -> new RuntimeException("Folder not found or access denied"));
+                    .orElseThrow(() -> {
+                        logger.error("Folder not found - ID: {}, Owner: {}", parentId, owner.getEmail());
+                        return new RuntimeException("Folder not found or access denied");
+                    });
+            logger.info("Found folder: {} (ID: {})", parent.getName(), parent.getId());
+        } else {
+            logger.info("Listing files in root folder");
         }
-        return fileRepo.findByParentAndOwner(parent, owner);
+
+        List<FileObject> files = fileRepo.findByParentAndOwner(parent, owner);
+        logger.info("Found {} files in folder {}", files.size(), parentId != null ? parentId : "root");
+
+        return files;
     }
 
     public Path getPath(FileObject fo) {

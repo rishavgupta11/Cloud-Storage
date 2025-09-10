@@ -29,6 +29,7 @@ public class JwtService {
     private final long accessTokenExpirationMs;
     private final long refreshTokenExpirationMs;
 
+    // Fixed constructor with correct property names
     public JwtService(
             @Value("${app.security.jwtSecret}") String secret,
             @Value("${app.security.jwtExpirationMs}") long accessTokenExpirationMs,
@@ -44,22 +45,27 @@ public class JwtService {
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;
     }
 
-    // Generate Access Token with additional claims
+    // Generate Access Token (compatible with your AuthController)
     public String generateAccessToken(String subject) {
         return generateToken(new HashMap<>(), subject, accessTokenExpirationMs);
     }
 
-    // Generate Access Token with custom claims
-    public String generateAccessToken(Map<String, Object> extraClaims, String subject) {
-        return generateToken(extraClaims, subject, accessTokenExpirationMs);
+    // Generate Access Token with UserDetails (compatible with your current code)
+    public String generateToken(UserDetails userDetails) {
+        return generateToken(new HashMap<>(), userDetails.getUsername(), accessTokenExpirationMs);
     }
 
-    // Generate Refresh Token
+    // Generate Refresh Token with String subject
     public String generateRefreshToken(String subject) {
         return generateToken(new HashMap<>(), subject, refreshTokenExpirationMs);
     }
 
-    // Generic token generation method
+    // Generate Refresh Token with UserDetails
+    public String generateRefreshToken(UserDetails userDetails) {
+        return generateToken(new HashMap<>(), userDetails.getUsername(), refreshTokenExpirationMs);
+    }
+
+    // Core token generation method
     private String generateToken(Map<String, Object> extraClaims, String subject, long expirationTime) {
         try {
             return Jwts.builder()
@@ -75,7 +81,7 @@ public class JwtService {
         }
     }
 
-    // Extract username (email) from token
+    // Extract username from token
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
@@ -108,7 +114,7 @@ public class JwtService {
         }
     }
 
-    // Validate token against UserDetails (compatible with Spring Security)
+    // Validate token against UserDetails
     public boolean isTokenValid(String token, UserDetails userDetails) {
         try {
             if (!StringUtils.hasText(token) || userDetails == null) {

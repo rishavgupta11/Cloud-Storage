@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "Drive API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "12345678-abcd-efgh-ijkl-1234567890ab"
+  },
+  "item": [
+    {
+      "name": "1. Register",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testuser0@gmail.com\",\n  \"password\": \"Pass@1234\",\n  \"displayName\": \"Test User\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+      }
+    },
+    {
+      "name": "2. Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"testuser0@gmail.com\",\n  \"password\": \"Pass@1234\"\n}"
+        },
+        "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const data = pm.response.json();",
+              "pm.environment.set(\"jwt_token\", data.token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Create Root Folder",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [{ "key": "name", "value": "Docs" }]
+        },
+        "url": { "raw": "{{base_url}}/folders", "host": ["{{base_url}}"], "path": ["folders"] }
+      }
+    },
+    {
+      "name": "4. Create Subfolder",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "name", "value": "Invoices" },
+            { "key": "parentId", "value": "{{folderId_root}}" }
+          ]
+        },
+        "url": { "raw": "{{base_url}}/folders", "host": ["{{base_url}}"], "path": ["folders"] }
+      }
+    },
+    {
+      "name": "5. List Root Folders",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/folders/0", "host": ["{{base_url}}"], "path": ["folders", "0"] }
+      }
+    },
+    {
+      "name": "6. Upload File to Root",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [] }
+          ]
+        },
+        "url": { "raw": "{{base_url}}/files/upload", "host": ["{{base_url}}"], "path": ["files", "upload"] }
+      }
+    },
+    {
+      "name": "7. Upload File to Subfolder",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "file", "type": "file", "src": [] },
+            { "key": "parentId", "value": "{{folderId_child}}" }
+          ]
+        },
+        "url": { "raw": "{{base_url}}/files/upload", "host": ["{{base_url}}"], "path": ["files", "upload"] }
+      }
+    },
+    {
+      "name": "8. List Files in Root",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/files/by-folder/0", "host": ["{{base_url}}"], "path": ["files", "by-folder", "0"] }
+      }
+    },
+    {
+      "name": "9. List Files in Subfolder",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/files/by-folder/{{folderId_child}}", "host": ["{{base_url}}"], "path": ["files", "by-folder", "{{folderId_child}}"] }
+      }
+    },
+    {
+      "name": "10. Rename Folder",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "newName", "value": "Bills" }
+          ]
+        },
+        "url": { "raw": "{{base_url}}/folders/{{folderId_child}}/rename", "host": ["{{base_url}}"], "path": ["folders", "{{folderId_child}}", "rename"] }
+      }
+    },
+    {
+      "name": "11. Delete Folder",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{jwt_token}}" }
+        ],
+        "url": { "raw": "{{base_url}}/folders/{{folderId_child}}", "host": ["{{base_url}}"], "path": ["folders", "{{folderId_child}}"] }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080" },
+    { "key": "jwt_token", "value": "" },
+    { "key": "folderId_root", "value": "" },
+    { "key": "folderId_child", "value": "" }
+  ]
+}

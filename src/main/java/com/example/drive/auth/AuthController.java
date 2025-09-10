@@ -13,11 +13,12 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -33,36 +34,47 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+        logger.info("Registration attempt for email: {}", request.getEmail());
+
         try {
             // Check if user already exists
             if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-                return ResponseEntity.badRequest()
-                        .body(new AuthResponse(null, null, null, "Email already registered"));
+                logger.warn("Email already exists: {}", request.getEmail());
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Email already registered");
+                return ResponseEntity.badRequest().body(error);
             }
 
             // Create new user
-            User user = new User();
-            user.setEmail(request.getEmail());
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
-            user.setRole("ROLE_USER"); // Set default role
+            User user = User.builder()
+                    .email(request.getEmail())
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .role("ROLE_USER")
+                    .build();
 
             userRepository.save(user);
+            logger.info("User registered successfully: {}", request.getEmail());
 
-            String accessToken = jwtService.generateAccessToken(user.getEmail());
-            String refreshToken = jwtService.generateRefreshToken(user.getEmail());
+            // Return success message without tokens (user must login separately)
+            Map<String, String> response = new HashMap<>();
+            response.put("message", "Account created successfully! Please login to continue.");
+            response.put("email", request.getEmail());
 
-            logger.info("User registered successfully: {}", user.getEmail());
-            return ResponseEntity.ok(new AuthResponse(accessToken, refreshToken, user.getEmail(), "Registration successful"));
+            return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("Registration failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new AuthResponse(null, null, null, "Registration failed"));
+            logger.error("Registration failed: ", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Registration failed");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody AuthRequest request) {
+        logger.info("Login attempt for email: {}", request.getEmail());
+
         try {
             // Authenticate user
             Authentication authentication = authManager.authenticate(
@@ -72,69 +84,92 @@ public class AuthController {
             User user = userRepository.findByEmail(request.getEmail())
                     .orElseThrow(() -> new RuntimeException("User not found after authentication"));
 
+            // Generate tokens
             String accessToken = jwtService.generateAccessToken(user.getEmail());
             String refreshToken = jwtService.generateRefreshToken(user.getEmail());
 
-            logger.info("User logged in successfully: {}", user.getEmail());
-            return ResponseEntity.ok(new AuthResponse(accessToken, refreshToken, user.getEmail(), "Login successful"));
+            Map<String, String> response = new HashMap<>();
+            response.put("accessToken", accessToken);
+            response.put("refreshToken", refreshToken);
+            response.put("email", user.getEmail());
+            response.put("message", "Login successful");
+
+            logger.info("User logged in successfully: {}", request.getEmail());
+            return ResponseEntity.ok(response);
 
         } catch (BadCredentialsException e) {
             logger.warn("Login failed - invalid credentials for email: {}", request.getEmail());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(null, null, null, "Invalid email or password"));
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Invalid credentials");
+            error.put("message", "Email or password is incorrect");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         } catch (AuthenticationException e) {
-            logger.error("Authentication failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(null, null, null, "Authentication failed"));
+            logger.error("Authentication failed: ", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Authentication failed");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         } catch (Exception e) {
-            logger.error("Login error: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new AuthResponse(null, null, null, "Login failed"));
+            logger.error("Login error: ", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Login failed");
+            error.put("message", "An unexpected error occurred");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@Valid @RequestBody TokenRefreshRequest request) {
+        logger.info("Token refresh attempt");
+
         try {
             String refreshToken = request.getRefreshToken();
 
-            // Validate refresh token format first
+            // Validate refresh token format
             if (!jwtService.isTokenValidFormat(refreshToken)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(new AuthResponse(null, null, null, "Invalid refresh token format"));
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Invalid refresh token format");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
             }
 
             String email = jwtService.extractUsername(refreshToken);
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
-            // Create UserDetails from User entity (since User implements UserDetails)
-            UserDetails userDetails = user;
+            // Create UserDetails from User entity
+            if (jwtService.isTokenValid(refreshToken, user)) {
+                String newAccessToken = jwtService.generateAccessToken(user.getEmail());
+                String newRefreshToken = jwtService.generateRefreshToken(user.getEmail());
 
-            // Validate refresh token
-            if (!jwtService.isTokenValid(refreshToken, userDetails)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(new AuthResponse(null, null, null, "Invalid or expired refresh token"));
+                Map<String, String> response = new HashMap<>();
+                response.put("accessToken", newAccessToken);
+                response.put("refreshToken", newRefreshToken);
+                response.put("email", email);
+                response.put("message", "Token refreshed successfully");
+
+                logger.info("Token refreshed successfully for user: {}", email);
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Invalid or expired refresh token");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
             }
 
-            String newAccessToken = jwtService.generateAccessToken(user.getEmail());
-            String newRefreshToken = jwtService.generateRefreshToken(user.getEmail()); // Generate new refresh token for security
-
-            logger.info("Token refreshed successfully for user: {}", email);
-            return ResponseEntity.ok(new AuthResponse(newAccessToken, newRefreshToken, email, "Token refreshed successfully"));
-
         } catch (Exception e) {
-            logger.error("Token refresh failed: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new AuthResponse(null, null, null, "Token refresh failed"));
+            logger.error("Token refresh failed: ", e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Token refresh failed");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
     }
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
         // In a stateless JWT setup, logout is typically handled client-side
-        // But you can implement token blacklisting here if needed
-        return ResponseEntity.ok().body("Logged out successfully");
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Logged out successfully");
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/validate")
@@ -145,18 +180,32 @@ public class AuthController {
                 String email = jwtService.extractUsername(token);
                 User user = userRepository.findByEmail(email).orElse(null);
 
-                if (user != null) {
-                    // Use the User entity directly since it implements UserDetails
-                    UserDetails userDetails = user;
-
-                    if (jwtService.isTokenValid(token, userDetails)) {
-                        return ResponseEntity.ok().body("Token is valid");
-                    }
+                if (user != null && jwtService.isTokenValid(token, user)) {
+                    Map<String, String> response = new HashMap<>();
+                    response.put("message", "Token is valid");
+                    response.put("email", email);
+                    return ResponseEntity.ok(response);
                 }
             }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid token");
+
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Invalid token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token validation failed");
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Token validation failed");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
+    }
+
+    // Test endpoint for debugging
+    @GetMapping("/test")
+    public ResponseEntity<?> test() {
+        logger.info("Test endpoint called");
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Auth controller is working!");
+        response.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        return ResponseEntity.ok(response);
     }
 }
